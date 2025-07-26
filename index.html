@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>University Slayer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <!-- Tone.js library for audio -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a202c; /* Dark background */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            overflow: hidden; /* Prevent scrolling */
+        }
+        .game-container {
+            background-color: #2d3748; /* Slightly lighter dark background for container */
+            border-radius: 1rem;
+            box-shadow: 0 10px 15px rgba(0, 0, 0, 0.5);
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            max-width: 90vw; /* Responsive width */
+            width: 600px; /* Max width for desktop */
+        }
+        canvas {
+            background-color: #4a5568; /* Game area background - will be overridden by drawn background */
+            border-radius: 0.75rem;
+            border: 2px solid #a0aec0; /* Light border */
+            display: block;
+            width: 100%; /* Make canvas responsive */
+            max-width: 500px; /* Max width for canvas */
+            height: 400px; /* Fixed height for consistent gameplay area */
+            margin-bottom: 1.5rem;
+            image-rendering: pixelated; /* Ensures pixel art stays sharp */
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+        .game-info {
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            margin-bottom: 1rem;
+            color: #e2e8f0; /* Light text */
+            font-weight: bold;
+            font-size: 1.125rem; /* Larger font size */
+        }
+        .game-controls {
+            display: flex;
+            flex-wrap: wrap; /* Allow wrapping on smaller screens */
+            justify-content: center;
+            gap: 1rem;
+            margin-top: 1rem;
+            width: 100%;
+        }
+        .btn {
+            background-image: linear-gradient(to right, #63b3ed, #4299e1); /* Blue gradient */
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.75rem;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            font-weight: bold;
+            transition: all 0.2s ease-in-out;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            position: relative;
+            overflow: hidden;
+            outline: none;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 8px rgba(0, 0, 0, 0.4);
+        }
+        .btn:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        .btn::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 300%;
+            height: 300%;
+            background: rgba(255, 255, 255, 0.15);
+            border-radius: 50%;
+            transition: all 0.75s ease-out;
+            transform: translate(-50%, -50%) scale(0);
+            opacity: 0;
+        }
+        .btn:hover::before {
+            transform: translate(-50%, -50%) scale(1);
+            opacity: 1;
+        }
+        .message-box {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 2rem;
+            border-radius: 1rem;
+            text-align: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            z-index: 100;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.7);
+            display: none; /* Hidden by default */
+        }
+        .message-box button {
+            margin-top: 1rem;
+        }
+        /* Removed .user-id-display as it's no longer needed */
+
+        /* Responsive adjustments */
+        @media (max-width: 640px) {
+            .game-container {
+                padding: 1rem;
+            }
+            canvas {
+                height: 300px; /* Smaller height for mobile */
+            }
+            .game-info {
+                font-size: 1rem;
+            }
+            .btn {
+                padding: 0.6rem 1.2rem;
+                font-size: 0.9rem;
+            }
+            .message-box {
+                font-size: 1.2rem;
+                padding: 1.5rem;
+            }
+            .game-controls {
+                flex-direction: column; /* Stack buttons on small screens */
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1 class="text-3xl font-bold text-white mb-4">University Slayer</h1>
+        <div class="game-info">
+            <span id="level-display">Level: Freshmen</span>
+            <span id="time-display">Time: 0s</span>
+            <span id="grade-display">Grade: F</span> <!-- Changed to Grade -->
+            <div id="hearts-display" class="flex gap-1">
+                <!-- Hearts will be drawn here by JS -->
+            </div>
+            <span id="gpa-display">GPA: 0.00</span> <!-- New GPA display -->
+        </div>
+        <canvas id="gameCanvas"></canvas>
+        <div class="game-controls">
+            <!-- Removed Start Game Button from here -->
+            <!-- Removed Restart Level Button from here -->
+            <button id="muteButton" class="btn">Mute Music</button>
+        </div>
+    </div>
+
+    <div id="messageBox" class="message-box">
+        <p id="messageText"></p>
+        <button id="messageButton" class="btn hidden">Continue</button>
+    </div>
+
+    <script type="module">
+        // Tone.js Synth and Sequence for background music
+        let synth;
+        let musicSequence;
+        let isMuted = false;
+
+        // Function to initialize and start music
+        async function startMusic() {
+            if (Tone.context.state !== 'running') {
+                await Tone.start();
+            }
+            if (!synth) { // Initialize synth and sequence only once
+                synth = new Tone.Synth().toDestination();
+                // Define a simple melody sequence
+                musicSequence = new Tone.Sequence((time, note) => {
+                    synth.triggerAttackRelease(note, "8n", time);
+                }, ["C4", "E4", "G4", "C5", "G4", "E4"], "4n"); // C major arpeggio
+                musicSequence.loop = true;
+            }
+            // Set playback rate based on current level difficulty
+            // Base rate: 1.0, increasing by 0.25 for each subsequent level
+            musicSequence.playbackRate = 1.0 + (currentLevelIndex * 0.25);
+
+            if (!isMuted && Tone.Transport.state !== 'started') { // Only start if not muted and not already started
+                Tone.Transport.start();
+                musicSequence.start(0);
+            }
+        }
+
+        // Function to pause music (instead of stopping entirely)
+        function pauseMusic() {
+            if (Tone.Transport.state === 'started') {
+                Tone.Transport.pause();
+            }
+        }
+
+        // Function to toggle mute
+        function toggleMute() {
+            isMuted = !isMuted;
+            if (isMuted) {
+                Tone.Destination.mute = true;
+                muteButton.textContent = 'Unmute Music';
+            } else {
+                Tone.Destination.mute = false;
+                muteButton.textContent = 'Mute Music';
+                // If game is running and not muted, ensure music plays
+                if (gameRunning && Tone.Transport.state !== 'started') {
+                    startMusic();
+                }
+            }
+        }
+
+        // Function to resume game intervals (still needed for game flow)
+        function resumeGameIntervals() {
+            const level = levels[currentLevelIndex];
+            gameInterval = setInterval(() => {
+                timeRemaining--;
+                if (timeRemaining <= 0) {
+                    clearInterval(gameInterval);
+                    clearInterval(itemDropInterval);
+                    gameRunning = false;
+                    endLevel();
+                }
+            }, 1000);
+            itemDropInterval = setInterval(createItem, level.itemFrequency);
+            if (!isMuted) {
+                startMusic(); // Resume music when game intervals resume
+            }
+        }
+
+        // --- Existing Game Logic ---
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Disable image smoothing for pixelated effect
+        ctx.imageSmoothingEnabled = false;
+        ctx.mozImageSmoothingEnabled = false;
+        ctx.webkitImageSmoothingEnabled = false;
+        ctx.msImageSmoothingEnabled = false;
+
+        const levelDisplay = document.getElementById('level-display');
+        const timeDisplay = document.getElementById('time-display');
+        const gradeDisplay = document.getElementById('grade-display'); // Now displays grade
+        const heartsDisplay = document.getElementById('hearts-display'); // Reference to the new hearts container
+        const gpaDisplay = document.getElementById('gpa-display'); // New GPA display element
+        const muteButton = document.getElementById('muteButton'); // Mute button reference
+        const messageBox = document.getElementById('messageBox');
+        const messageText = document.getElementById('messageText');
+        const messageButton = document.getElementById('messageButton');
+
+        // Game variables
+        let player;
+        let items = [];
+        let gameInterval;
+        let itemDropInterval;
+        let gameRunning = false;
+        let currentLevelIndex = 0;
+        let score = 0; // Numerical score still used for streak bonus calculation
+        let streak = 0;
+        let timeRemaining = 0;
+        let itemsCaughtThisLevel = 0;
+        let grade = 'F';
+        let chancesRemaining = 3; // Player starts with 3 chances per level
+        let totalGradePoints = 0; // New: Sum of grade points for GPA calculation
+        let levelsCompleted = 0; // New: Count of levels for GPA calculation
+
+        // Grade point mapping
+        const gradePointMap = {
+            'A': 4,
+            'B': 3,
+            'C': 2,
+            'D': 1,
+            'F': 0
+        };
+
+        // Player properties (adjusted for pixel art character)
+        const playerWidth = 40; // Effective width for pixelated character
+        const playerHeight = 30; // Half of original 60
+        const playerSpeed = 5; // Movement speed
+
+        // Item properties
+        const itemWidth = 30; // Default size for desired items
+        const itemHeight = 30;
+        const bombWidth = 15; // Half of original itemWidth (30 / 2 = 15)
+        const bombHeight = 15; // Half of original itemHeight (30 / 2 = 15)
+
+        const itemEmojis = {
+            book: '📚',
+            essay: '📝',
+            computer: '💻',
+            bomb: '💣'
+        };
+        const desiredItems = ['book', 'essay', 'computer'];
+
+        // Level configurations
+        const levels = [
+            {
+                name: 'Freshmen',
+                timeLimit: 30, // seconds
+                minItemsToCatch: 5,
+                itemSpeed: 2, // pixels per frame
+                itemFrequency: 1000, // ms between new items
+                bombChance: 0.1 // 10% chance
+            },
+            {
+                name: 'Sophomore',
+                timeLimit: 30, // seconds
+                minItemsToCatch: 10,
+                itemSpeed: 3,
+                itemFrequency: 800,
+                bombChance: 0.15
+            },
+            {
+                name: 'Junior',
+                timeLimit: 30, // seconds
+                minItemsToCatch: 15,
+                itemSpeed: 4,
+                itemFrequency: 600,
+                bombChance: 0.2
+            },
+            {
+                name: 'Senior',
+                timeLimit: 30, // seconds
+                minItemsToCatch: 20,
+                itemSpeed: 5,
+                itemFrequency: 400,
+                bombChance: 0.25
+            }
+        ];
+
+        // Define grass and player vertical positioning based on 1/10 screen height
+        const grassStartY = canvas.height * 0.9; // Grass starts at 9/10 of the canvas height
+        const grassHeight = canvas.height * 0.1; // This will be 1/10 of the canvas height
+
+        // Initialize player position
+        function initPlayer() {
+            // Player stands just above the grass
+            player = {
+                x: (canvas.width - playerWidth) / 2,
+                y: grassStartY - playerHeight - 5, // 5 pixels buffer above grass
+                dx: 0 // movement speed
+            };
+        }
+
+        // Draw pixelated background (Lincoln Memorial style)
+        function drawBackground() {
+            // Sky
+            ctx.fillStyle = '#87CEEB'; // Light blue sky
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Lincoln Memorial-style Building
+            const buildingWidth = 280;
+            const buildingHeight = 200; // Made taller
+            const buildingX = (canvas.width - buildingWidth) / 2;
+            const buildingY = grassStartY - buildingHeight; // Building sits on the grass line
+
+            // Base platform
+            ctx.fillStyle = '#A9A9A9'; // Darker gray stone
+            ctx.fillRect(buildingX - 10, buildingY + buildingHeight - 10, buildingWidth + 20, 10);
+            ctx.fillRect(buildingX - 20, buildingY + buildingHeight, buildingWidth + 40, 10);
+
+            // Main structure
+            ctx.fillStyle = '#C0C0C0'; // Silver gray stone
+            ctx.fillRect(buildingX, buildingY, buildingWidth, buildingHeight);
+
+            // Columns (more detailed rectangles)
+            const numColumns = 6;
+            const columnWidth = 15;
+            const columnHeight = buildingHeight - 20;
+            const columnSpacing = (buildingWidth - (numColumns * columnWidth)) / (numColumns + 1);
+            const columnColor = '#B0B0B0'; // Slightly darker gray for columns
+            const columnTopColor = '#A0A0A0'; // Even darker for column tops
+
+            for (let i = 0; i < numColumns; i++) {
+                const colX = buildingX + columnSpacing + (i * (columnWidth + columnSpacing));
+                // Main column body
+                ctx.fillStyle = columnColor;
+                ctx.fillRect(colX, buildingY + 20, columnWidth, columnHeight);
+                // Column top (capital)
+                ctx.fillStyle = columnTopColor;
+                ctx.fillRect(colX - 2, buildingY + 15, columnWidth + 4, 5); // Wider top
+                ctx.fillRect(colX, buildingY + 10, columnWidth, 5); // Smaller top
+            }
+
+            // Roof (flat, slightly darker)
+            ctx.fillStyle = '#909090'; // Gray for roof
+            ctx.fillRect(buildingX, buildingY - 10, buildingWidth, 10);
+
+            // University Slayer Logo (Circular with Crossed Swords)
+            const logoCenterX = canvas.width / 2;
+            const logoCenterY = buildingY + buildingHeight - 80; // Adjusted to be lower on the building
+            const logoRadius = 40;
+
+            // Outer circle
+            ctx.fillStyle = '#4299e1'; // Blue
+            ctx.beginPath();
+            ctx.arc(logoCenterX, logoCenterY, logoRadius, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Inner circle (for contrast)
+            ctx.fillStyle = '#ffffff'; // White
+            ctx.beginPath();
+            ctx.arc(logoCenterX, logoCenterY, logoRadius - 5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Two Swords forming an 'X' with hilts and sharp tips
+            const swordColor = '#A9A9A9'; // Blade color (light gray)
+            const hiltColor = '#8B4513'; // Hilt color (brown)
+            const totalSwordLength = 35; // Total length of the sword (blade + hilt + tip)
+            const bladeWidth = 5;
+            const hiltWidth = 10;
+            const hiltHeight = 5;
+            const tipLength = 5; // Length of the sharp tip
+            const bladeLength = totalSwordLength - hiltHeight - tipLength; // Calculate blade length
+
+            // Function to draw a single sword (relative to its own center for rotation)
+            // This function now draws the sword from its center, with theilt at the bottom.
+            function drawSingleSword() {
+                // Draw hilt
+                ctx.fillStyle = hiltColor;
+                ctx.fillRect(-hiltWidth / 2, (totalSwordLength / 2) - hiltHeight, hiltWidth, hiltHeight);
+
+                // Draw blade
+                ctx.fillStyle = swordColor;
+                ctx.fillRect(-bladeWidth / 2, -(totalSwordLength / 2) + tipLength, bladeWidth, bladeLength);
+
+                // Draw sharp tip (triangle)
+                ctx.beginPath();
+                ctx.moveTo(-bladeWidth / 2, -(totalSwordLength / 2)); // Bottom-left of tip base (relative to sword's own center)
+                ctx.lineTo(bladeWidth / 2, -(totalSwordLength / 2)); // Bottom-right of tip base
+                ctx.lineTo(0, -(totalSwordLength / 2) - tipLength); // Top point of tip
+                ctx.fill();
+            }
+
+            // First sword (rotated for X-shape, crossing at blade)
+            ctx.save(); // Save current canvas state
+            ctx.translate(logoCenterX, logoCenterY); // Move origin to logo center
+            ctx.rotate(Math.PI / 4); // Rotate by 45 degrees
+            drawSingleSword(); // Draw the sword
+            ctx.restore(); // Restore canvas state
+
+            // Second sword (diagonal, top-right to bottom-left)
+            ctx.save(); // Save current canvas state
+            ctx.translate(logoCenterX, logoCenterY); // Move origin to logo center
+            ctx.rotate(-Math.PI / 4); // Rotate by -45 degrees
+            drawSingleSword(); // Draw the sword
+            ctx.restore(); // Restore canvas state
+
+            // University Slayer text around the circle (more complex for pixel art)
+            ctx.fillStyle = '#FFFFFF'; // White text
+            ctx.font = 'bold 10px "Press Start 2P", monospace'; // Smaller font for circular text
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            const text = "UNIVERSITY SLAYER";
+            const angleStep = (Math.PI * 1.6) / text.length; // Adjust angle for spacing
+            const textRadius = logoRadius + 10; // Distance from center
+
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                const angle = (Math.PI * 0.7) + (i * angleStep); // Start angle adjusted
+                ctx.save();
+                ctx.translate(logoCenterX + Math.cos(angle) * textRadius, logoCenterY + Math.sin(angle) * textRadius);
+                ctx.rotate(angle + Math.PI / 2); // Rotate characters to follow circle
+                ctx.fillText(char, 0, 0);
+                ctx.restore();
+            }
+
+
+            // Grass foreground
+            ctx.fillStyle = '#7CFC00'; // Green grass
+            ctx.fillRect(0, grassStartY, canvas.width, grassHeight); // Use calculated grassStartY and grassHeight
+
+            // Grass details (small darker green blocks)
+            ctx.fillStyle = '#558B2F';
+            for (let i = 0; i < canvas.width; i += 10) {
+                if (Math.random() < 0.5) {
+                    ctx.fillRect(i, grassStartY - 5, 5, 5); // Position relative to grassStartY
+                }
+            }
+        }
+
+        // Draw pixelated player with facial features and extending hands
+        function drawPlayer() {
+            // Body colors
+            const skinColor = '#FFDBAC'; // Light skin
+            const hairColor = '#654321'; // Brown hair
+            const shirtColor = '#4682B4'; // Steel blue shirt
+            const pantsColor = '#2F4F4F'; // Dark slate gray pants
+
+            // Head (adjusted for new playerHeight)
+            ctx.fillStyle = skinColor;
+            ctx.fillRect(player.x + 10, player.y, 20, 10); // Head (half height)
+
+            // Hair (adjusted for new playerHeight)
+            ctx.fillStyle = hairColor;
+            ctx.fillRect(player.x + 8, player.y - 5, 24, 5); // Top hair
+            ctx.fillRect(player.x + 5, player.y + 2, 5, 5); // Left sideburn
+            ctx.fillRect(player.x + 30, player.y + 2, 5, 5); // Right sideburn
+
+            // Eyes (adjusted for new playerHeight)
+            ctx.fillStyle = '#000000'; // Black eyes
+            ctx.fillRect(player.x + 14, player.y + 2, 4, 2); // Left eye
+            ctx.fillRect(player.x + 22, player.y + 2, 4, 2); // Right eye
+
+            // Nose (adjusted for new playerHeight)
+            ctx.fillStyle = skinColor;
+            ctx.fillRect(player.x + 18, player.y + 5, 4, 2); // Nose
+
+            // Mouth (adjusted for new playerHeight)
+            ctx.fillStyle = '#FF0000'; // Red mouth
+            ctx.fillRect(player.x + 16, player.y + 8, 8, 2); // Mouth
+
+            // Ears (adjusted for new playerHeight)
+            ctx.fillStyle = skinColor;
+            ctx.fillRect(player.x + 7, player.y + 4, 3, 3); // Left ear
+            ctx.fillRect(player.x + 30, player.y + 4, 3, 3); // Right ear
+
+
+            // Body (shirt) (adjusted for new playerHeight)
+            ctx.fillStyle = shirtColor;
+            ctx.fillRect(player.x + 5, player.y + 10, 30, 10); // Torso
+
+            // Arms extending outwards (adjusted for new playerHeight)
+            const armLength = 20; // How far arms extend horizontally
+            const armHeight = 3; // Thinner arms
+            const handSize = 4; // Smaller hands
+
+            // Left arm
+            ctx.fillStyle = shirtColor; // Arm color matches shirt
+            ctx.fillRect(player.x - armLength, player.y + 12, armLength + 5, armHeight); // Arm segment
+            ctx.fillStyle = skinColor; // Hand color
+            ctx.fillRect(player.x - armLength - handSize, player.y + 12, handSize, handSize); // Hand
+
+            // Right arm
+            ctx.fillStyle = shirtColor; // Arm color matches shirt
+            ctx.fillRect(player.x + playerWidth - 5, player.y + 12, armLength + 5, armHeight); // Arm segment
+            ctx.fillStyle = skinColor; // Hand color
+            ctx.fillRect(player.x + playerWidth + armLength, player.y + 12, handSize, handSize); // Hand
+
+
+            // Legs (pants) (adjusted for new playerHeight)
+            ctx.fillStyle = pantsColor;
+            ctx.fillRect(player.x + 5, player.y + 20, 10, 10); // Left leg
+            ctx.fillRect(player.x + 25, player.y + 20, 10, 10); // Right leg
+        }
+
+        // Create a new falling item
+        function createItem() {
+            const itemType = Math.random() < levels[currentLevelIndex].bombChance ? 'bomb' : desiredItems[Math.floor(Math.random() * desiredItems.length)];
+            let item;
+            if (itemType === 'bomb') {
+                item = {
+                    x: Math.random() * (canvas.width - bombWidth),
+                    y: 0,
+                    type: itemType,
+                    emoji: itemEmojis[itemType],
+                    width: bombWidth,
+                    height: bombHeight
+                };
+            } else {
+                item = {
+                    x: Math.random() * (canvas.width - itemWidth),
+                    y: 0,
+                    type: itemType,
+                    emoji: itemEmojis[itemType],
+                    width: itemWidth,
+                    height: itemHeight
+                };
+            }
+            items.push(item);
+        }
+
+        // Draw items
+        function drawItems() {
+            items.forEach(item => {
+                // Use item.width for font size to scale emoji with item size
+                ctx.font = `${item.width}px Arial`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(item.emoji, item.x + item.width / 2, item.y + item.height / 2);
+            });
+        }
+
+        // Update game state
+        function update() {
+            if (!gameRunning) return;
+
+            // Move player
+            player.x += player.dx;
+
+            // Keep player within canvas bounds
+            // Adjust bounds to account for extended hands
+            const armOffset = 20 + 5; // armLength + handSize
+            if (player.x < -armOffset) { // Left arm extends left
+                player.x = -armOffset;
+            } else if (player.x + playerWidth > canvas.width + armOffset) { // Right arm extends right
+                player.x = canvas.width - playerWidth + armOffset;
+            }
+
+
+            // Move items and check for collisions
+            items.forEach((item, index) => {
+                item.y += levels[currentLevelIndex].itemSpeed;
+
+                // Check for collision with player (using item's specific width/height)
+                if (item.y + item.height > player.y &&
+                    item.y < player.y + playerHeight &&
+                    item.x + item.width > player.x - armOffset && // Left hand collision
+                    item.x < player.x + playerWidth + armOffset) { // Right hand collision
+
+                    // Item caught
+                    if (item.type === 'bomb') {
+                        // Game over if bomb caught
+                        gameOverBomb(); // Call new function for bomb game over logic
+                        return; // Stop processing this item
+                    } else {
+                        // Desired item caught
+                        score += 10;
+                        streak++;
+                        itemsCaughtThisLevel++;
+                        score += streak; // Streak bonus
+                        items.splice(index, 1); // Remove item
+                    }
+                } else if (item.y > canvas.height) {
+                    // Item dropped (went off-screen)
+                    if (item.type !== 'bomb') { // Only break streak for desired items
+                        streak = 0; // Reset streak
+                    }
+                    items.splice(index, 1); // Remove item
+                }
+            });
+
+            // Update UI
+            gradeDisplay.textContent = `Grade: ${calculateCurrentGrade()}`; // Display current grade during gameplay
+            timeDisplay.textContent = `Time: ${Math.max(0, timeRemaining).toFixed(0)}s`;
+            gpaDisplay.textContent = `GPA: ${calculateGPA().toFixed(2)}`; // Update GPA display
+        }
+
+        // Calculate current grade during gameplay
+        function calculateCurrentGrade() {
+            const level = levels[currentLevelIndex];
+            const requiredForC = level.minItemsToCatch;
+
+            // F if less than 60% of required items
+            if (itemsCaughtThisLevel < requiredForC * 0.6) {
+                return 'F';
+            }
+            // D if between 60% and 100% (exclusive) of required items
+            else if (itemsCaughtThisLevel < requiredForC) {
+                return 'D';
+            }
+
+            // If we reach here, itemsCaughtThisLevel >= requiredForC
+            const itemsBeyondC = itemsCaughtThisLevel - requiredForC;
+
+            if (itemsBeyondC >= 4) { // 4 or more additional items for A
+                return 'A';
+            } else if (itemsBeyondC >= 2) { // 2 or 3 additional items for B
+                return 'B';
+            } else { // 0 or 1 additional items
+                return 'C';
+            }
+        }
+
+        // Calculate GPA
+        function calculateGPA() {
+            if (levelsCompleted === 0) {
+                return 0;
+            }
+            return totalGradePoints / levelsCompleted;
+        }
+
+        // Draw hearts based on chances remaining
+        function drawHearts() {
+            heartsDisplay.innerHTML = ''; // Clear existing hearts
+            for (let i = 0; i < chancesRemaining; i++) {
+                const heart = document.createElement('span');
+                heart.textContent = '❤️'; // Red heart emoji
+                heart.style.fontSize = '1.5rem'; // Adjust size as needed
+                heartsDisplay.appendChild(heart);
+            }
+        }
+
+        // Game loop
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
+            drawBackground(); // Draw the new pixelated background
+            update();
+            drawPlayer();
+            drawItems();
+
+            if (gameRunning) {
+                requestAnimationFrame(animate);
+            }
+        }
+
+        // Handle keyboard input for player movement
+        function handleKeyDown(e) {
+            if (e.key === 'ArrowLeft' || e.key === 'a') {
+                player.dx = -playerSpeed;
+            } else if (e.key === 'ArrowRight' || e.key === 'd') {
+                player.dx = playerSpeed;
+            }
+        }
+
+        function handleKeyUp(e) {
+            if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'ArrowRight' || e.key === 'd') {
+                player.dx = 0;
+            }
+        }
+
+        // Touch controls for mobile
+        let touchStartX = 0;
+        function handleTouchStart(e) {
+            e.preventDefault(); // Prevent scrolling
+            touchStartX = e.touches[0].clientX;
+        }
+
+        function handleTouchMove(e) {
+            e.preventDefault(); // Prevent scrolling
+            const touchCurrentX = e.touches[0].clientX;
+            const deltaX = touchCurrentX - touchStartX;
+
+            // Adjust player position based on touch movement
+            player.x += deltaX * 0.5; // Multiplier for sensitivity
+
+            // Update touchStartX for next move
+            touchStartX = touchCurrentX;
+        }
+
+        function handleTouchEnd(e) {
+            e.preventDefault(); // Prevent scrolling
+            player.dx = 0; // Stop player movement
+        }
+
+        // Convert letter grade to grade points
+        function getGradePoints(grade) {
+            return gradePointMap[grade] || 0;
+        }
+
+        // Show a custom message box
+        function showMessageBox(message, buttonText, buttonAction) {
+            gameRunning = false; // Pause game
+            clearInterval(gameInterval);
+            clearInterval(itemDropInterval);
+            pauseMusic(); // Pause music when message box is displayed
+
+            messageText.innerHTML = message;
+            messageButton.textContent = buttonText;
+            messageButton.onclick = buttonAction;
+            messageButton.classList.remove('hidden');
+            messageBox.style.display = 'block';
+        }
+
+        // Hide message box
+        function hideMessageBox() {
+            messageBox.style.display = 'none';
+            messageButton.classList.add('hidden');
+            if (gameRunning && !isMuted) { // Only resume music if game is running and not muted
+                startMusic();
+            }
+        }
+
+        // Function to display initial game introduction screen
+        function showGameIntroScreen() {
+            const message = `
+                <p class="text-3xl font-bold mb-4">University Slayer</p>
+                <p class="text-xl mb-2">Objective: Graduate University by clearing 4 levels!</p>
+                <ul class="list-disc list-inside text-left mx-auto max-w-xs text-lg">
+                    <li>Catch books 📚, essays 📝, and computers 💻.</li>
+                    <li>Avoid bombs 💣 (instant F grade!).</li>
+                    <li>Each level is 30 seconds long, collect required items within this time.</li>
+                    <li>Move with Arrow Keys or A/D. Drag on touch devices.</li>
+                    <li>You have 3 ❤️ per level. Score C or higher to advance.</li>
+                </ul>
+                <p class="text-lg mt-2">Good luck, student!</p>
+            `;
+            showMessageBox(message, 'Start Game', showCareerPathwayScreen); // Start Game button leads to career pathway
+        }
+
+        // Function to draw the career pathway map (Stairs style)
+        function drawCareerMap() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
+
+            // Background for map screen
+            ctx.fillStyle = '#87CEEB'; // Sky blue
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#7CFC00'; // Grass green
+            ctx.fillRect(0, canvas.height * 0.9, canvas.width, canvas.height * 0.1); // Ground
+
+            const baseGroundY = canvas.height * 0.9; // The very bottom line where stairs should rest
+            const startX = canvas.width * 0.1;
+            const originalStepWidth = 80;
+            const stepWidth = originalStepWidth * 0.75; // Decreased by 1/4
+            const originalStepHeight = 40;
+            const stepHeight = originalStepHeight * 0.75; // Decreased by 1/4
+            const levelColors = ['#FFD700', '#FF8C00', '#DC143C', '#8A2BE2']; // Gold, Dark Orange, Crimson, Blue Violet
+            const textColor = '#FFFFFF';
+
+            ctx.font = 'bold 12px "Press Start 2P", monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            // Draw steps and text
+            for (let i = 0; i < levels.length; i++) {
+                const level = levels[i];
+                const blockX = startX + (i * stepWidth);
+                const blockY = baseGroundY - ((i + 1) * stepHeight); // Top of the current step
+                const blockHeight = (i + 1) * stepHeight; // Height from top of step to ground
+
+                ctx.fillStyle = levelColors[i];
+                ctx.fillRect(blockX, blockY, stepWidth, blockHeight);
+
+                // Draw level name on the step
+                ctx.fillStyle = textColor;
+                ctx.fillText(level.name.split(' ')[0], blockX + stepWidth / 2, blockY + stepHeight / 2);
+            }
+
+            // Draw Graduation Cap at the very top (ultimate graduation icon)
+            const capXCenter = startX + (levels.length * stepWidth) + (stepWidth / 2); // Centered above the last step
+            const topOfLastStepY = baseGroundY - (levels.length * stepHeight);
+
+            // Cap dimensions (half of original, then vertical portion x3)
+            const capTopSquareWidth = 25 / 2; // Reduced by half
+            const capTopSquareHeight = 4 / 2;  // Reduced by half
+            const capTasselBaseWidth = 15; // Original 5 * 3 (now 15)
+            const capTasselBaseHeight = 8 / 2; // Reduced by half
+            const capTasselEndWidth = 3 / 2;   // Reduced by half
+            const capTasselEndHeight = 3 / 2;  // Reduced by half
+
+            // Calculate overall height of the new cap
+            const totalNewCapHeight = capTopSquareHeight + capTasselBaseHeight + capTasselEndHeight;
+
+            // Positioning adjustments: move right by 1/4 inch (approx 24px), move up by 1/4 inch (approx 24px)
+            const moveRightPx = 24;
+            const moveUpPx = 24;
+
+            const capDrawX = capXCenter - capTopSquareWidth / 2 + moveRightPx;
+            const capDrawY = topOfLastStepY - totalNewCapHeight - 5 - moveUpPx; // Original Y - total height - buffer - moveUpPx
+
+            // Cap (pixel art)
+            ctx.fillStyle = '#000000'; // Black cap
+            // Top square
+            ctx.fillRect(capDrawX, capDrawY, capTopSquareWidth, capTopSquareHeight);
+            // Tassel base
+            ctx.fillRect(capDrawX + (capTopSquareWidth / 2) - (capTasselBaseWidth / 2), capDrawY + capTopSquareHeight, capTasselBaseWidth, capTasselBaseHeight);
+            ctx.fillStyle = '#FFD700'; // Gold tassel
+            // Tassel end
+            ctx.fillRect(capDrawX + (capTopSquareWidth / 2) + (capTasselBaseWidth / 2), capDrawY + capTopSquareHeight + capTasselBaseHeight, capTasselEndWidth, capTasselEndHeight);
+        }
+
+        // Function to display career pathway screen
+        function showCareerPathwayScreen() {
+            // Clear the canvas and draw the map
+            drawCareerMap();
+            // Then show a message box with just the button
+            showMessageBox('', 'Begin Freshmen Year', showLevelIntroScreen);
+        }
+
+        // Function to display level intro screen
+        function showLevelIntroScreen() {
+            const level = levels[currentLevelIndex];
+            const message = `
+                <p><strong>Level: ${level.name}</strong></p>
+                <p>Catch at least <strong>${level.minItemsToCatch} items</strong> to pass!</p>
+                <p>Time Limit: ${level.timeLimit} seconds</p>
+            `;
+            showMessageBox(message, 'Start Level', actualStartLevel);
+        }
+
+        // Actual function to start the level after the intro screen
+        function actualStartLevel() {
+            hideMessageBox();
+            const level = levels[currentLevelIndex];
+            levelDisplay.textContent = `Level: ${level.name}`;
+            timeRemaining = level.timeLimit;
+            itemsCaughtThisLevel = 0;
+            items = []; // Clear all items
+            streak = 0; // Reset streak for new level
+            initPlayer(); // Reset player position
+
+            gameRunning = true;
+            resumeGameIntervals(); // Start game intervals
+            animate(); // Start animation loop
+        }
+
+        // End current level (grade-based)
+        function endLevel() {
+            const finalGrade = calculateCurrentGrade(); // Get the final grade for the level
+            totalGradePoints += getGradePoints(finalGrade); // Add grade points to total
+            levelsCompleted++; // Increment levels completed
+            gpaDisplay.textContent = `GPA: ${calculateGPA().toFixed(2)}`; // Update GPA display
+
+            let message;
+            let buttonText;
+            let buttonAction;
+
+            if (finalGrade === 'D' || finalGrade === 'F') {
+                chancesRemaining--; // Lose a chance
+                drawHearts(); // Update hearts display
+                if (chancesRemaining > 0) {
+                    message = `Level Failed! Your Grade: ${finalGrade}.<br>You have ${chancesRemaining} chances left.`;
+                    buttonText = 'Try Again';
+                    buttonAction = restartLevel;
+                } else {
+                    // Game Over due to low grade and no chances left
+                    showGameOverScreen(`Level Failed! Your Grade: ${finalGrade}.<br>No chances left. Game Over!`);
+                    return; // Exit function to prevent showing default message box
+                }
+            } else { // Grade is A, B, or C - level passed
+                chancesRemaining = 3; // Reset chances on successful pass
+                drawHearts(); // Update hearts display
+                if (currentLevelIndex === levels.length - 1) {
+                    // Graduation scenario
+                    showGraduationScreen(calculateGPA().toFixed(2));
+                    return; // Exit function to prevent showing default message box
+                } else {
+                    message = `Level Complete! Your Grade: ${finalGrade}.<br>Items Caught: ${itemsCaughtThisLevel}/${levels[currentLevelIndex].minItemsToCatch} (C grade target)`;
+                    buttonText = 'Next Level';
+                    buttonAction = nextLevel;
+                }
+            }
+            showMessageBox(message, buttonText, buttonAction);
+        }
+
+        // Game over function (bomb-based)
+        function gameOverBomb() {
+            const finalGrade = 'F'; // Bomb always results in F
+            totalGradePoints += getGradePoints(finalGrade); // Add grade points (0 for F)
+            levelsCompleted++; // Increment levels completed
+            gpaDisplay.textContent = `GPA: ${calculateGPA().toFixed(2)}`; // Update GPA display
+
+            chancesRemaining--; // Lose a chance
+            drawHearts(); // Update hearts display
+            let message;
+            let buttonText;
+            let buttonAction;
+
+            if (chancesRemaining > 0) {
+                message = `You caught a bomb! Grade: F.<br>You have ${chancesRemaining} chances left.`; // Explicitly state F
+                buttonText = 'Try Again';
+                buttonAction = restartLevel;
+            } else {
+                // Game Over due to bomb and no chances left
+                showGameOverScreen(`You caught a bomb! Grade: F.<br>No chances left. Game Over!`);
+                return; // Exit function to prevent showing default message box
+            }
+            showMessageBox(message, buttonText, buttonAction);
+        }
+
+        // New: Generic Game Over Screen
+        function showGameOverScreen(reasonMessage) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
+            ctx.fillStyle = '#333333'; // Dark background for game over
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            ctx.fillStyle = '#FF0000'; // Red text for Game Over
+            ctx.font = 'bold 30px "Press Start 2P", monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('GAME OVER!', canvas.width / 2, canvas.height / 2 - 50);
+
+            ctx.fillStyle = '#FFFFFF'; // White text for reason and GPA
+            ctx.font = 'bold 16px "Press Start 2P", monospace';
+            ctx.fillText(reasonMessage, canvas.width / 2, canvas.height / 2 + 10);
+            ctx.fillText(`Your Final GPA: ${calculateGPA().toFixed(2)}`, canvas.width / 2, canvas.height / 2 + 40);
+
+            showMessageBox('', 'Restart Game', restartGame); // Use the message box for the button
+        }
+
+        // New: Graduation Screen
+        function showGraduationScreen(finalGPA) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
+            ctx.fillStyle = '#87CEEB'; // Sky blue
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#7CFC00'; // Grass green
+            ctx.fillRect(0, canvas.height * 0.9, canvas.width, canvas.height * 0.1); // Ground
+
+            ctx.fillStyle = '#FFFFFF'; // White text
+            ctx.font = 'bold 24px "Press Start 2P", monospace';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('CONGRATULATIONS!', canvas.width / 2, canvas.height * 0.2);
+            ctx.fillText('YOU GRADUATED!', canvas.width / 2, canvas.height * 0.3);
+            ctx.fillText(`Final GPA: ${finalGPA}`, canvas.width / 2, canvas.height * 0.4);
+
+            // Draw large diploma in the center
+            const diplomaWidth = 80;
+            const diplomaHeight = 100;
+            const diplomaX = canvas.width / 2 - diplomaWidth / 2;
+            const diplomaY = canvas.height / 2 - diplomaHeight / 2 + 50; // Centered lower
+
+            ctx.fillStyle = '#FFD700'; // Gold scroll
+            ctx.fillRect(diplomaX, diplomaY, diplomaWidth, diplomaHeight);
+            ctx.fillStyle = '#FFFFFF'; // White paper
+            ctx.fillRect(diplomaX + 5, diplomaY + 5, diplomaWidth - 10, diplomaHeight - 10);
+            ctx.fillStyle = '#8B4513'; // Brown ribbon
+            ctx.fillRect(diplomaX + diplomaWidth - 10, diplomaY + 10, 10, 30);
+            ctx.fillRect(diplomaX + diplomaWidth - 20, diplomaY + 20, 20, 10);
+
+
+            showMessageBox('', 'Play Again', restartGame); // Use message box for button
+        }
+
+
+        // Proceed to next level
+        function nextLevel() {
+            currentLevelIndex++;
+            if (currentLevelIndex < levels.length) {
+                showLevelIntroScreen(); // Show intro screen before next level
+            } else {
+                // This case should be handled by endLevel for graduation
+            }
+        }
+
+        // Restart current level (retains overall score, resets level-specifics)
+        function restartLevel() {
+            hideMessageBox();
+            // Reset only level-specific stats, preserve overall score and chances
+            timeRemaining = levels[currentLevelIndex].timeLimit;
+            itemsCaughtThisLevel = 0;
+            items = [];
+            streak = 0;
+            initPlayer();
+            gameRunning = true;
+            resumeGameIntervals();
+            animate();
+        }
+
+        // Restart entire game (resets everything)
+        function restartGame() {
+            hideMessageBox();
+            currentLevelIndex = 0;
+            score = 0;
+            streak = 0;
+            itemsCaughtThisLevel = 0;
+            chancesRemaining = 3; // Reset chances for a brand new game
+            totalGradePoints = 0; // Reset GPA tracking
+            levelsCompleted = 0; // Reset GPA tracking
+            levelDisplay.textContent = `Level: ${levels[0].name}`;
+            gradeDisplay.textContent = `Grade: F`; // Reset grade display
+            timeDisplay.textContent = `Time: ${levels[0].timeLimit}s`;
+            gpaDisplay.textContent = `GPA: 0.00`; // Reset GPA display
+            drawHearts(); // Update hearts display
+            initPlayer();
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas
+            drawBackground(); // Draw initial background
+            drawPlayer(); // Draw player in initial state
+            items = []; // Clear any remaining items
+            showGameIntroScreen(); // Return to the main intro screen
+        }
+
+        // Event listeners
+        muteButton.addEventListener('click', toggleMute);
+
+        window.addEventListener('keydown', handleKeyDown);
+        window.addEventListener('keyup', handleKeyUp);
+
+        // Add touch event listeners to the canvas
+        canvas.addEventListener('touchstart', handleTouchStart);
+        canvas.addEventListener('touchmove', handleTouchMove);
+        canvas.addEventListener('touchend', handleTouchEnd);
+
+
+        // Initial setup on window load
+        window.onload = function() {
+            initPlayer();
+            drawBackground(); // Draw the initial background
+            drawPlayer();
+            levelDisplay.textContent = `Level: ${levels[0].name}`;
+            timeDisplay.textContent = `Time: ${levels[0].timeLimit}s`;
+            gradeDisplay.textContent = `Grade: F`; // Initial grade display
+            gpaDisplay.textContent = `GPA: 0.00`; // Initial GPA display
+            drawHearts(); // Initial hearts display
+            startMusic(); // Initialize music on load and start the sequence
+            showGameIntroScreen(); // Show the main game intro screen first
+        };
+
+    </script>
+</body>
+</html>
